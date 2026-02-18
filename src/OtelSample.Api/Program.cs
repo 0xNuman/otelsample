@@ -56,8 +56,15 @@ try
             tags: ["external"]);
 
     // ── Dependency Injection — Infrastructure ─────────────────────────────────
-    builder.Services.AddScoped<IDbConnectionFactory, SqlConnectionFactory>();
+    // WHY Singleton for connection factory: SqlConnectionFactory holds no per-request
+    // state — it only reads the connection string from IConfiguration and creates new
+    // SqlConnection objects on each call. Singleton avoids repeated config lookups and
+    // matches the lifetime of DbInitialiser (which runs once at startup).
+    builder.Services.AddSingleton<IDbConnectionFactory, SqlConnectionFactory>();
     builder.Services.AddScoped<IOrderRepository, OrderRepository>();
+    // WHY Singleton for DbInitialiser: it is called exactly once at startup (not per
+    // request), so Singleton is the correct lifetime. With IDbConnectionFactory also
+    // Singleton there is no captive-dependency violation.
     builder.Services.AddSingleton<DbInitialiser>();
 
     // Typed HttpClient for the payment service.
