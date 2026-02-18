@@ -14,9 +14,16 @@ scrape_configs:
       - targets: ["host.docker.internal:5000"]
     metrics_path: /metrics
 
-  # ── OTel Collector self-metrics ────────────────────────────────────────────
-  # The collector exposes its own pipeline metrics (spans received, dropped, etc.)
-  # Useful for diagnosing collector back-pressure issues.
-  - job_name: "otel-collector"
+  # ── OTel Collector self-metrics (port 8888) ───────────────────────────────
+  # The collector exposes its own internal metrics (memory, spans received, etc.)
+  # Useful for diagnosing collector back-pressure and drop issues.
+  - job_name: "otel-collector-internal"
     static_configs:
       - targets: ["otel-collector:8888"]
+
+  # ── OTel Collector pipeline metrics (port 8889) ────────────────────────────
+  # Metrics received via OTLP and re-exported via the Prometheus exporter.
+  # Port 8889 is distinct from self-metrics to avoid address conflicts.
+  - job_name: "otel-collector-pipeline"
+    static_configs:
+      - targets: ["otel-collector:8889"]
