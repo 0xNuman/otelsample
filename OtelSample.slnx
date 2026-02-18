@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/OtelSample.Api/OtelSample.Api.csproj" />
+    <Project Path="src/OtelSample.Application/OtelSample.Application.csproj" />
+    <Project Path="src/OtelSample.Infrastructure/OtelSample.Infrastructure.csproj" />
+    <Project Path="src/OtelSample.Observability/OtelSample.Observability.csproj" />
+  </Folder>
+</Solution>

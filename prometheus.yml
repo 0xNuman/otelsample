@@ -1,0 +1,22 @@
+global:
+  scrape_interval: 15s      # How often Prometheus scrapes targets
+  evaluation_interval: 15s  # How often Prometheus evaluates alerting rules
+
+scrape_configs:
+
+  # ── .NET app (running on host) ─────────────────────────────────────────────
+  # WHY host.docker.internal: the .NET app runs on the host (dotnet run), not
+  # inside a container. host.docker.internal resolves to the host machine from
+  # within a container on macOS and Windows. On Linux, add
+  # --add-host=host.docker.internal:host-gateway to the prometheus service.
+  - job_name: "otelsample-api"
+    static_configs:
+      - targets: ["host.docker.internal:5000"]
+    metrics_path: /metrics
+
+  # ── OTel Collector self-metrics ────────────────────────────────────────────
+  # The collector exposes its own pipeline metrics (spans received, dropped, etc.)
+  # Useful for diagnosing collector back-pressure issues.
+  - job_name: "otel-collector"
+    static_configs:
+      - targets: ["otel-collector:8888"]

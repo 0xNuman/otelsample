@@ -1,0 +1,28 @@
+# .NET build artefacts
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.vscode/
+
+# Rider
+.idea/
+
+# NuGet
+*.nupkg
+packages/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Secrets — never commit these
+appsettings.*.local.json
+secrets.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker / Podman
+*.env

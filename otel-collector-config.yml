@@ -1,0 +1,67 @@
+# OpenTelemetry Collector configuration for local development.
+#
+# Pipeline:
+#   OTLP receiver (gRPC 4317, HTTP 4318)
+#     → batch processor (buffer + compress before export)
+#       → Prometheus exporter (metrics)
+#       → logging exporter (traces + logs to stdout for debugging)
+#
+# In production (AWS), replace this with the ADOT Collector config that exports to:
+#   • X-Ray (traces via awsxray exporter)
+#   • Amazon Managed Prometheus (metrics via prometheusremotewrite exporter)
+#   • CloudWatch (logs via awscloudwatchlogs exporter)
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      http:
+        endpoint: "0.0.0.0:4318"
+
+processors:
+  batch:
+    # WHY batch: reduces the number of export calls, improving throughput.
+    # Sends data when either the batch reaches 512 items OR 1 second has elapsed.
+    send_batch_size: 512
+    timeout: 1s
+
+  memory_limiter:
+    # WHY memory_limiter: prevents the collector from OOM-killing when a burst
+    # of telemetry arrives. Drops data rather than crashing the collector.
+    check_interval: 1s
+    limit_mib: 256
+
+exporters:
+  # Expose received metrics on port 8888 for Prometheus to scrape.
+  # WHY: lets Prometheus consume OTLP metrics from services that cannot expose
+  # a /metrics endpoint themselves (e.g., Lambda functions using OTLP push).
+  prometheus:
+    endpoint: "0.0.0.0:8888"
+
+  # Debug exporter — prints spans and logs to stdout.
+  # Disable in production to reduce collector CPU usage.
+  debug:
+    verbosity: normal
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug]
+
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus, debug]
+
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug]
+
+  # Collector self-observability — exposes internal metrics on port 8888.
+  telemetry:
+    metrics:
+      address: "0.0.0.0:8888"
