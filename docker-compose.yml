@@ -20,17 +20,17 @@ services:
   # connects to master, creates the OtelSample database and Orders table
   # (both idempotent), then exits. The api waits for it via
   # service_completed_successfully so it always starts with a ready schema.
-  db-init:
-    build:
-      context: docker/db-init
-    container_name: otelsample-db-init
-    environment:
-      DB_HOST: sqlserver
-      DB_PASSWORD: "YourStrong@Passw0rd"
-    depends_on:
-      sqlserver:
-        condition: service_healthy
-    restart: "no"
+  # db-init:
+  #   build:
+  #     context: docker/db-init
+  #   container_name: otelsample-db-init
+  #   environment:
+  #     DB_HOST: sqlserver
+  #     DB_PASSWORD: "YourStrong@Passw0rd"
+  #   depends_on:
+  #     sqlserver:
+  #       condition: service_healthy
+  #   restart: "no"
 
   # ── .NET API ────────────────────────────────────────────────────────────
   # WHY containerised: Microsoft.Data.SqlClient 6.x hits a macOS ARM64
@@ -45,7 +45,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       # Override the connection string so the container reaches sqlserver
       # by Docker service name instead of localhost.
-      ConnectionStrings__SqlServer: "Server=sqlserver,1433;Database=OtelSample;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;"
+      ConnectionStrings__SqlServer: "Server=sqlserver,1433;Database=OtelSample;User Id=sa;Password=${DB_PASSWD};TrustServerCertificate=True;"
       # OTel Collector endpoint (container-to-container)
       Otel__OtlpEndpoint: "http://otel-collector:4317"
     ports:
@@ -53,8 +53,8 @@ services:
     depends_on:
       sqlserver:
         condition: service_healthy
-      db-init:
-        condition: service_completed_successfully
+      # db-init:
+      #   condition: service_completed_successfully
 
   # ── SQL Server ────────────────────────────────────────────────────────────
   # WHY azure-sql-edge: mssql/server is x86-64 only and either segfaults or
@@ -62,15 +62,17 @@ services:
   # image and is T-SQL compatible for local development.
   # On x86-64 Linux/Windows, swap to mcr.microsoft.com/mssql/server:2022-latest.
   sqlserver:
-    image: mcr.microsoft.com/azure-sql-edge:latest
+    #image: mcr.microsoft.com/azure-sql-edge:latest
+    build: ./db
     container_name: otelsample-sqlserver
-    platform: linux/arm64
+    #platform: linux/arm64
     environment:
-      SA_PASSWORD: "YourStrong@Passw0rd"
-      ACCEPT_EULA: "Y"
-      MSSQL_PID: "Developer"
+    #    DB_PASSWD: ${DB_PASSWD}
+        SA_PASSWORD: ${DB_PASSWD}
+    #   ACCEPT_EULA: "Y"
+    #   MSSQL_PID: "Developer"
     ports:
-      - "1433:1433"
+      - "2433:1433"
     volumes:
       - sqlserver-data:/var/opt/mssql
     healthcheck:

@@ -1,0 +1,6 @@
+@host_address = http://localhost:5001
+
+### GET Order by ID
+GET {{host_address}}/api/orders/3
+Accept: application/json
+X-Tenant-Id: tenant-a
