@@ -4,14 +4,12 @@ global:
 
 scrape_configs:
 
-  # ── .NET app (running on host) ─────────────────────────────────────────────
-  # WHY host.docker.internal: the .NET app runs on the host (dotnet run), not
-  # inside a container. host.docker.internal resolves to the host machine from
-  # within a container on macOS and Windows. On Linux, add
-  # --add-host=host.docker.internal:host-gateway to the prometheus service.
+  # ── .NET API (container-to-container) ──────────────────────────────────────
+  # The API now runs inside compose as the "api" service, so Prometheus
+  # reaches it directly on the Docker network via service name and port 8080.
   - job_name: "otelsample-api"
     static_configs:
-      - targets: ["host.docker.internal:5000"]
+      - targets: ["api:8080"]
     metrics_path: /metrics
 
   # ── OTel Collector self-metrics (port 8888) ───────────────────────────────

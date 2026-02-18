@@ -2,45 +2,85 @@
 # Local observability stack for OtelSample.
 #
 # Services:
+#   db-init        — one-shot container: creates OtelSample DB + schema, then exits
+#   api            — .NET API (containerised, avoids macOS ARM64 SqlClient issue)
 #   sqlserver      — SQL Server 2022 (app database)
-#   prometheus     — Prometheus scraping /metrics from the .NET app
+#   prometheus     — Prometheus scraping /metrics from the API container
 #   grafana        — Grafana with pre-provisioned dashboard
 #   otel-collector — OTel Collector (receives OTLP; useful for AWS mode testing locally)
 #
 # Run with:
-#   podman compose up -d
-#
-# The .NET app runs on the host (dotnet run), NOT inside compose.
-# Prometheus is configured to scrape host.docker.internal:5000/metrics.
+#   podman compose up -d --build
 
 services:
 
+  # ── DB initialiser ───────────────────────────────────────────────────────
+  # WHY separate container: azure-sql-edge does not ship sqlcmd, so there is
+  # no in-image mechanism to run init SQL. This one-shot Python container
+  # connects to master, creates the OtelSample database and Orders table
+  # (both idempotent), then exits. The api waits for it via
+  # service_completed_successfully so it always starts with a ready schema.
+  db-init:
+    build:
+      context: docker/db-init
+    container_name: otelsample-db-init
+    environment:
+      DB_HOST: sqlserver
+      DB_PASSWORD: "YourStrong@Passw0rd"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    restart: "no"
+
+  # ── .NET API ────────────────────────────────────────────────────────────
+  # WHY containerised: Microsoft.Data.SqlClient 6.x hits a macOS ARM64
+  # SocketException during TDS pre-login. Running inside a Linux container
+  # avoids this entirely and better represents production (ECS/K8s).
+  api:
+    build:
+      context: .
+      dockerfile: src/OtelSample.Api/Dockerfile
+    container_name: otelsample-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      # Override the connection string so the container reaches sqlserver
+      # by Docker service name instead of localhost.
+      ConnectionStrings__SqlServer: "Server=sqlserver,1433;Database=OtelSample;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;"
+      # OTel Collector endpoint (container-to-container)
+      Otel__OtlpEndpoint: "http://otel-collector:4317"
+    ports:
+      - "5001:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+
   # ── SQL Server ────────────────────────────────────────────────────────────
-  # WHY azure-sql-edge on Apple Silicon (ARM64 / M-series Macs):
-  #   mcr.microsoft.com/mssql/server:2022-latest is x86-64 only and segfaults
-  #   under QEMU emulation on ARM64. azure-sql-edge ships a native ARM64 image
-  #   and is fully compatible with SQL Server T-SQL for local development.
-  #   On x86-64 Linux/Windows you can swap this back to mssql/server:2022-latest.
+  # WHY azure-sql-edge: mssql/server is x86-64 only and either segfaults or
+  # crawls under QEMU on Apple Silicon. azure-sql-edge ships a native ARM64
+  # image and is T-SQL compatible for local development.
+  # On x86-64 Linux/Windows, swap to mcr.microsoft.com/mssql/server:2022-latest.
   sqlserver:
     image: mcr.microsoft.com/azure-sql-edge:latest
     container_name: otelsample-sqlserver
     platform: linux/arm64
     environment:
       SA_PASSWORD: "YourStrong@Passw0rd"
-      ACCEPT_EULA: "1"
+      ACCEPT_EULA: "Y"
       MSSQL_PID: "Developer"
     ports:
       - "1433:1433"
     volumes:
       - sqlserver-data:/var/opt/mssql
     healthcheck:
-      # Use a TCP-level check — azure-sql-edge does not ship sqlcmd, and
-      # the TDS port (1433) being open is sufficient to know SQL Server is ready.
-      test: ["CMD-SHELL", "cat /dev/null > /dev/tcp/localhost/1433 && echo ok || exit 1"]
+      # TCP check: azure-sql-edge does not ship sqlcmd, so verify the TDS
+      # port (1433) is accepting connections. Bash required for /dev/tcp.
+      test: ["CMD-SHELL", "bash -c 'cat < /dev/null > /dev/tcp/localhost/1433'"]
       interval: 5s
       timeout: 3s
       retries: 20
-      start_period: 20s
+      start_period: 30s
 
   # ── Prometheus ────────────────────────────────────────────────────────────
   prometheus:
@@ -54,7 +94,7 @@ services:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.retention.time=7d"
     depends_on:
-      - sqlserver
+      - api
 
   # ── Grafana ───────────────────────────────────────────────────────────────
   grafana:

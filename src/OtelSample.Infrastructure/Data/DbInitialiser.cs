@@ -8,6 +8,8 @@ namespace OtelSample.Infrastructure.Data;
 /// Creates the Orders table on startup if it does not already exist.
 /// WHY: keeps the reference app self-contained — no migration tooling required.
 /// In a production system, replace this with a proper migration strategy (Flyway, DbUp, etc.).
+/// The OtelSample database itself is created by the db-init container in the Docker stack,
+/// or must be pre-created when running the API directly on the host.
 /// </summary>
 public sealed class DbInitialiser(IDbConnectionFactory factory, ILogger<DbInitialiser> logger)
 {
